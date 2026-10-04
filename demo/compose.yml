@@ -1,0 +1,201 @@
+# demo/compose.yml — SDOP autonome, pour essayer sans aucune infrastructure.
+#
+#     make quickstart          (voir demo/README.md)
+#
+# ⚠ DÉMONSTRATION : l'identité vient d'un FAUX fournisseur d'identité
+#   (test/regression/stub-auth) qui « connecte » toute requête. Aucun document
+#   réel ici, jamais.
+#
+# Ce fichier n'est NI le déploiement intégré (../docker-compose.yml, derrière
+# le socle d'identité partagé) NI le harnais de régression
+# (../test/docker-compose.yml) : il ne remplace aucun des deux et n'en modifie
+# aucun. La petite duplication d'assemblage avec le harnais est volontaire —
+# chaque fichier garde un seul rôle, et la configuration intégrée reste
+# exercée directement par ses propres tests (SEC-010).
+#
+# Isolement — c'est la frontière réelle de la démo, pas la bannière (SEC-005) :
+#   · watermark lit l'identité dans des en-têtes (SDOP_TRUST_MODE=proxy) ; il
+#     ne doit donc être joignable QUE par nginx. Aucun port publié pour
+#     watermark, placeholder ni le stub, et un réseau PAR backend, partagé
+#     avec nginx seul : le stub ne joint pas watermark, placeholder non plus
+#     (SEC-005, audit du 2026-10-04). Pairs de confiance restants : nginx, le
+#     démon Docker et l'administrateur de l'hôte ;
+#   · nginx seul est publié, et sur la boucle locale uniquement ;
+#   · réseau et projet Compose dédiés (`sdop-demo`), aucun container_name :
+#     coexiste avec le harnais et le déploiement intégré sans collision ;
+#   · aucun réseau externe, aucun SMTP, aucun export SIEM ;
+#   · ce dossier est le répertoire de projet : le `.env` de la racine (réglages
+#     du déploiement intégré) n'est jamais lu.
+
+name: sdop-demo
+
+x-durcissement: &durcissement
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+  # Marqueur de propriété : `make quickstart-reset` refuse de supprimer quoi que
+  # ce soit si une ressource qu'il retirerait (conteneurs du projet, volumes
+  # qu'ils montent, volumes et réseaux résolus du modèle) ne le porte pas avec
+  # l'étiquette du projet, puis vérifie qu'il ne reste rien (SEC-029).
+  # Garde-fou contre les collisions, pas une protection face à qui administre
+  # Docker.
+  labels:
+    org.sdop.demo: "1"
+
+services:
+
+  watermark:
+    build:
+      context: ..
+      dockerfile: watermark/Dockerfile
+    image: sdop-demo-watermark:local
+    restart: unless-stopped
+    <<: *durcissement
+    read_only: true
+    tmpfs:
+      - /tmp
+    # Clés du service lues dans le volume `keys` (demo/pki.py), conservées d'un
+    # démarrage à l'autre : documents chiffrés au repos et manifestes signés
+    # restent valides après un redémarrage.
+    entrypoint:
+      - sh
+      - -c
+      - |
+        SDOP_CONTENT_KEY="$$(cat /keys/content.key)" \
+        SDOP_TILE_SECRET="$$(cat /keys/tile.secret)" \
+        exec "$$@"
+      - watermark
+    command: ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2",
+              "--timeout", "120", "--access-logfile", "-", "app:app"]
+    environment:
+      SDOP_DEMO: "1"
+      SDOP_TRUST_MODE: proxy
+      SDOP_DOC_DIR: /documents
+      SDOP_LEDGER_DIR: /journal
+      SDOP_SIGNING_KEY: /keys/signing.pem
+      SDOP_RENDER_DPI: "${SDOP_RENDER_DPI:-120}"
+      SDOP_SIEM_PATH: ""
+      SDOP_SMTP_HOST: ""
+      # Lien affiché à l'émission : URL complète du vhost externe, port compris.
+      SDOP_PUBLIC_URL: "https://ext.sdop.localhost:${SDOP_DEMO_PORT:-8443}"
+    volumes:
+      - documents:/documents
+      - journal:/journal
+      - keys:/keys:ro
+    networks: [watermark]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+
+  # Sonde d'identité : app.conf route /_identite vers elle (nginx refuse de
+  # démarrer si l'amont est introuvable). Elle rend observable le strip+inject.
+  placeholder:
+    build:
+      context: ../placeholder
+    image: sdop-demo-placeholder:local
+    restart: unless-stopped
+    <<: *durcissement
+    networks: [placeholder]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # FAUX outpost Authentik — nommé ainsi pour que app.conf le résolve tel quel.
+  authentik-server:
+    build:
+      context: ../test/regression/stub-auth
+    image: sdop-demo-stub-auth:local
+    restart: unless-stopped
+    <<: *durcissement
+    environment:
+      STUB_USERNAME: ${STUB_USERNAME:-demo}
+      STUB_GROUPS: ${STUB_GROUPS:-tlp-amber-emetteurs}
+      STUB_EMAIL: ${STUB_EMAIL:-demo@example.invalid}
+      STUB_UID: ${STUB_UID:-1}
+      STUB_REQUIRED_HOST_SUFFIX: ".localhost"
+    networks: [auth]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  nginx:
+    build:
+      context: ..
+      dockerfile: demo/nginx.Dockerfile
+    image: sdop-demo-nginx:local
+    restart: unless-stopped
+    <<: *durcissement
+    cap_add: [NET_BIND_SERVICE, CHOWN, SETUID, SETGID]
+    volumes:
+      - pki:/etc/ssl/core:ro
+    networks: [watermark, placeholder, auth]
+    ports:
+      # Boucle locale UNIQUEMENT. Les deux vhosts (app.* avec mTLS, ext.* accès
+      # par lien) partagent ce port et se distinguent par leur nom (SNI) : un
+      # second port n'ajouterait aucune frontière.
+      - "127.0.0.1:${SDOP_DEMO_PORT:-8443}:443"
+    depends_on:
+      authentik-server:
+        condition: service_healthy
+      placeholder:
+        condition: service_healthy
+      watermark:
+        condition: service_healthy
+
+  # Outil, jamais démarré par `up` : crée/renouvelle PKI et clés (demo/pki.py,
+  # passé sur l'entrée standard). Même image que watermark (cryptography).
+  pki:
+    image: sdop-demo-watermark:local
+    profiles: [outils]
+    labels: {org.sdop.demo: "1"}
+    user: "0"
+    network_mode: none
+    entrypoint: []
+    environment:
+      SDOP_DEMO_DOMAIN: sdop.localhost
+    volumes:
+      - pki:/pki
+      - ca:/ca
+      - keys:/keys
+    # L'image watermark déclare /documents et /journal comme volumes : sans ces
+    # tmpfs, chaque `run` de l'outil créerait deux volumes anonymes, invisibles
+    # à l'inventaire du reset (SEC-029).
+    tmpfs:
+      - /documents
+      - /journal
+
+networks:
+  # Un réseau par backend, nginx étant le seul membre commun.
+  watermark:
+    labels: {org.sdop.demo: "1"}
+  placeholder:
+    labels: {org.sdop.demo: "1"}
+  auth:
+    labels: {org.sdop.demo: "1"}
+
+volumes:
+  # Conservés par `make quickstart-down`, supprimés par `make quickstart-reset`.
+  documents:
+    labels: {org.sdop.demo: "1"}
+  journal:
+    labels: {org.sdop.demo: "1"}
+  pki:
+    labels: {org.sdop.demo: "1"}
+  ca:
+    labels: {org.sdop.demo: "1"}
+  keys:
+    labels: {org.sdop.demo: "1"}

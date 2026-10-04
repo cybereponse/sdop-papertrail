@@ -1,0 +1,8 @@
+# Contexte de build = racine du dépôt (service watermark). Liste BLANCHE : seul
+# ce que watermark/Dockerfile copie y entre. Sans elle, le contexte de build
+# emporterait vers le démon Docker les secrets locaux, le .env et les données
+# de var/ — et échouerait si le dossier de secrets n'est lisible que par root.
+*
+!watermark/
+!ledger/ledger.py
+!scripts/sdop-sceller.py

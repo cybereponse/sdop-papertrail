@@ -1,0 +1,21 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.17.5/.schema/devbox.schema.json",
+  "packages": [
+    "python@3.12",
+    "pandoc@latest",
+    "typst@latest"
+  ],
+  "shell": {
+    "init_hook": [],
+    "scripts": {
+      "test": [
+        "cd \"$DEVBOX_PROJECT_ROOT\"",
+        "make test"
+      ],
+      "compose-config": [
+        "cd \"$DEVBOX_PROJECT_ROOT\"",
+        "docker compose -f docker-compose.yml config -q && echo 'compose : OK'"
+      ]
+    }
+  }
+}

@@ -1,0 +1,84 @@
+{% extends "_base.html" %}
+{% block title %}SDOP — documents{% endblock %}
+{% block content %}
+
+<h2>Publier un document</h2>
+{% if publishable %}
+<form class="publish" method="post" action="{{ url_for('publish') }}"
+      enctype="multipart/form-data">
+  <label for="tlp">Niveau TLP</label>
+  <select id="tlp" name="tlp" required>
+    {% for tlp in publishable %}<option value="{{ tlp }}"{% if tlp == "TLP:AMBER" %} selected{% endif %}>{{ tlp }}</option>{% endfor %}
+  </select>
+  <label for="document">Fichier PDF</label>
+  <input id="document" name="document" type="file" accept="application/pdf" required>
+
+  <label for="destinataires">Destinataires — un par ligne</label>
+  <textarea id="destinataires" name="destinataires" rows="3"
+            placeholder="compte.utilisateur&#10;correspondant@exemple.fr"></textarea>
+
+  <label for="duree_jours">Visible pendant (jours)</label>
+  <input id="duree_jours" name="duree_jours" type="number" min="1" max="365"
+         value="{{ ttl_defaut }}">
+
+  <label class="case"><input type="checkbox" name="envoyer_lien" value="1"
+         {% if mail_actif %}checked{% else %}disabled{% endif %}>
+    Envoyer à chaque adresse un lien de consultation par courriel
+    {% if not mail_actif %}<em>(courriel non configuré sur ce serveur)</em>{% endif %}</label>
+
+  <button type="submit">Publier</button>
+</form>
+<p class="note">Le niveau proposé est limité à ceux pour lesquels vos groupes
+  vous habilitent comme émetteur. <strong>Seuls les destinataires désignés
+  pourront lire ce document</strong>, et seulement s'ils sont par ailleurs
+  habilités à son niveau TLP — les deux conditions sont exigées. Une entrée
+  contenant « @ » est traitée comme une adresse, joignable par lien.
+  Passé le délai, le document n'est plus visible de personne, vous compris.
+  Le dépôt est inscrit au ledger avec l'empreinte SHA-256 du fichier source.
+  Si l'envoi est coché, chaque adresse reçoit un lien par courriel ; le CODE
+  vous est affiché une seule fois sur la page suivante, à dicter par téléphone.</p>
+{% else %}
+<p class="note">Aucun de vos groupes ne vous habilite comme émetteur. La
+  publication requiert un groupe <code>tlp-&lt;niveau&gt;-emetteurs</code>.</p>
+{% endif %}
+
+{% if publishable %}
+<h2>Enrôler un correspondant (TOTP)</h2>
+<form class="publish" method="post" action="{{ url_for('enroler') }}">
+  <label for="enr-destinataire">Adresse du correspondant</label>
+  <input id="enr-destinataire" name="destinataire" type="email" required
+         placeholder="correspondant@exemple.fr" autocomplete="off">
+  <button type="submit">Enrôler</button>
+</form>
+<p class="note">Pour un correspondant <strong>récurrent</strong> : un enrôlement
+  à vie, puis chaque lien s'ouvre avec le code de son application, sans rien à
+  dicter. Une adresse déjà enrôlée est refusée ; la réinitialisation (appareil
+  perdu) est réservée aux administrateurs.</p>
+{% endif %}
+
+<h2>Documents consultables</h2>
+{% if docs %}
+<table>
+  <thead><tr><th>TLP</th><th>Document</th><th>Déposé</th><th>Visible jusqu'au</th>
+             <th>Émetteur</th><th>Empreinte</th><th></th></tr></thead>
+  <tbody>
+  {% for d in docs %}
+    <tr>
+      <td class="tlp tlp-{{ d.tlp|replace('TLP:','')|replace('+','-')|lower }}">
+        {{ d.tlp }}</td>
+      <td>{{ d.original_name }}</td>
+      <td>{{ d.published_at[:16]|replace('T',' ') }}</td>
+      <td>{{ d.expires_at[:10] }}</td>
+      <td>{{ d.published_by }}</td>
+      <td><code>{{ d.version_hash[:12] }}</code></td>
+      <td><a href="{{ url_for('viewer', doc_id=d.doc_id) }}">consulter</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="note">Aucun document consultable avec vos habilitations
+  {% if readable %}({{ readable|join(', ') }}){% else %}(aucun niveau){% endif %}.</p>
+{% endif %}
+
+{% endblock %}

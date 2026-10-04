@@ -1,0 +1,4 @@
+# Dépendances du stub Authentik (source).
+# Aligné sur les autres services : une version de Flask qui traîne en arrière
+# est une surface à suivre en plus, pour un service qui ne fait que 25 lignes.
+flask==3.1.3

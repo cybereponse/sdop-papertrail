@@ -1,0 +1,142 @@
+{
+  "lockfile_version": "1",
+  "packages": {
+    "github:NixOS/nixpkgs/nixpkgs-unstable": {
+      "last_modified": "2026-09-26T02:47:14Z",
+      "resolved": "github:NixOS/nixpkgs/d54020a6ac3211e9f4201631bdf67678818c0cdf?lastModified=1790390834"
+    },
+    "pandoc@latest": {
+      "last_modified": "2026-08-27T07:16:00Z",
+      "resolved": "github:NixOS/nixpkgs/c27cdad491a991b11ed731760aa2ef8db0cb0410#pandoc",
+      "source": "devbox-search",
+      "version": "3.7.0.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/bgslvgzca3ya5ln6axvsh20wa8cn6lqk-pandoc-cli-3.7.0.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/bgslvgzca3ya5ln6axvsh20wa8cn6lqk-pandoc-cli-3.7.0.2"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/czqzjc5jfs1l7anr9zp2lnncm86jhzw8-pandoc-cli-3.7.0.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/czqzjc5jfs1l7anr9zp2lnncm86jhzw8-pandoc-cli-3.7.0.2"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/qsvyw58wk9494w5xsv3zhn1hx8s3gqrv-pandoc-cli-3.7.0.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/qsvyw58wk9494w5xsv3zhn1hx8s3gqrv-pandoc-cli-3.7.0.2"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/rwhs945lb1yv0a34nj4n51ws3k8yykmq-pandoc-cli-3.7.0.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/rwhs945lb1yv0a34nj4n51ws3k8yykmq-pandoc-cli-3.7.0.2"
+        }
+      }
+    },
+    "python@3.12": {
+      "last_modified": "2026-08-27T07:16:00Z",
+      "plugin_version": "0.0.5",
+      "resolved": "github:NixOS/nixpkgs/c27cdad491a991b11ed731760aa2ef8db0cb0410#python312",
+      "source": "devbox-search",
+      "version": "3.12.14",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/p1wfv7znig26m3hns4583cb9va3kzxkg-python3-3.12.14",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/p1wfv7znig26m3hns4583cb9va3kzxkg-python3-3.12.14"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/gsf1fvx39nm1hlj8wq6qr1xjicxnzf2v-python3-3.12.14",
+              "default": true
+            },
+            {
+              "name": "debug",
+              "path": "/nix/store/n26dkq3a90vpsly3cmpjm7k5bz7i6las-python3-3.12.14-debug"
+            }
+          ],
+          "store_path": "/nix/store/gsf1fvx39nm1hlj8wq6qr1xjicxnzf2v-python3-3.12.14"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/9ka5lknbqqg6nzs3zp6qyncf1k3ayz97-python3-3.12.14",
+              "default": true
+            },
+            {
+              "name": "debug",
+              "path": "/nix/store/ikyc73znayjnlld5rj1mwws9rhi0gaba-python3-3.12.14-debug"
+            }
+          ],
+          "store_path": "/nix/store/9ka5lknbqqg6nzs3zp6qyncf1k3ayz97-python3-3.12.14"
+        }
+      }
+    },
+    "typst@latest": {
+      "last_modified": "2026-08-27T07:16:00Z",
+      "resolved": "github:NixOS/nixpkgs/c27cdad491a991b11ed731760aa2ef8db0cb0410#typst",
+      "source": "devbox-search",
+      "version": "0.15.1",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/gsh1mbqzkb6wkm85qfw9zix4dls8cjns-typst-0.15.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/gsh1mbqzkb6wkm85qfw9zix4dls8cjns-typst-0.15.1"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/9z5wlckd9ggjwzlbxqdhh22ff9g91q1c-typst-0.15.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/9z5wlckd9ggjwzlbxqdhh22ff9g91q1c-typst-0.15.1"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/n1fhw9lc9zxmz1w11d1zykmsqwi5bxcd-typst-0.15.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/n1fhw9lc9zxmz1w11d1zykmsqwi5bxcd-typst-0.15.1"
+        }
+      }
+    }
+  }
+}

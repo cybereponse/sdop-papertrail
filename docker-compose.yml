@@ -1,0 +1,175 @@
+# docker-compose.yml — Projet SDOP (Lot 1)
+# Rejoint le réseau du core CybeRéponse (identité + reverse proxy — voir
+# ../core/docker-compose.yml) en EXTERNAL : ne démarre/gère PAS nginx/Authentik/
+# step-ca, juste son propre backend applicatif derrière ce socle partagé.
+#
+# Prérequis : core (../core/) démarré — `cd ../core && make up` d'abord.
+
+services:
+
+  # --- Backend placeholder ---
+  # Prouve que la chaîne mTLS + forward-auth + strip fonctionne.
+  # N'est PAS le viewer final (lots ultérieurs).
+  placeholder:
+    build:
+      context: ./placeholder
+      dockerfile: Dockerfile
+    image: sdop-placeholder:0.1.0
+    # container_name volontairement absent — voir la note du service watermark.
+    restart: unless-stopped
+    networks:
+      - sdop-identity-net
+    healthcheck:
+      # wget absent de python:slim (Debian) — healthcheck en Python natif
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    # Limites de ressources (SEC-011). La sonde ne fait aucun travail : ces
+    # bornes servent à empêcher qu'elle prive le service watermark de CPU ou
+    # de mémoire si elle part en vrille, pas à dimensionner une charge.
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+    labels:
+      - traefik.enable=false
+
+  # --- Service watermark (Lot 2 — ARCHITECTURE.md) ---
+  # Le produit SDOP proprement dit : publication, visionneuse rasterisée,
+  # export filigrané, journalisation au ledger.
+  #
+  # ⚠ Aucun `container_name` dans ce fichier, pour aucun service. Le nom
+  # d'un objet dépend de l'environnement de déploiement ; ce dépôt est livré
+  # tel quel et tourne en développement comme en production. Le nom vient
+  # donc d'une surcouche de déploiement (`docker-compose.override.yml`),
+  # jamais d'ici : un nom de production en dur tournerait sous ce nom en
+  # développement.
+  watermark:
+    build:
+      # Contexte = racine du dépôt : l'image embarque ledger/ledger.py, qui
+      # vit hors de watermark/ et n'y est jamais recopié.
+      context: .
+      dockerfile: watermark/Dockerfile
+    image: sdop-watermark:0.1.0
+    restart: unless-stopped
+    environment:
+      # Mode de confiance : l'identité vient des en-têtes posés par le proxy du
+      # socle partagé. `dev` n'a rien à faire ici (voir watermark/identity.py).
+      SDOP_TRUST_MODE: proxy
+      SDOP_DOC_DIR: /documents
+      SDOP_LEDGER_DIR: /journal
+      SDOP_RENDER_DPI: "${SDOP_RENDER_DPI:-150}"
+      # `discret` (défaut) : étiquette TLP et attribution courte en en-tête,
+      # attribution complète en pied, dans les marges et au centre — comme un
+      # rapport officiel classifié. `dense` ajoute une diagonale répétée portant
+      # « TLP · compte », ce qui densifie la couverture d'un extrait recadré au
+      # prix de la lisibilité.
+      #
+      # Aucun des deux modes ne garantit l'attribution d'un fragment ARBITRAIRE :
+      # un extrait découpé entre deux répétitions reste anonyme. Mesurer avant
+      # d'affirmer (voir exigence EX-9). Voir watermark/render.py.
+      SDOP_WATERMARK_DENSITY: "${SDOP_WATERMARK_DENSITY:-discret}"
+      # Budgets de rendu (SEC-017), évalués AVANT toute allocation. La taille du
+      # fichier déposé ne borne pas le coût de sa rasterisation.
+      SDOP_MAX_PAGES: "${SDOP_MAX_PAGES:-500}"
+      SDOP_MAX_PAGE_PIXELS: "${SDOP_MAX_PAGE_PIXELS:-40000000}"
+      SDOP_MAX_TOTAL_PIXELS: "${SDOP_MAX_TOTAL_PIXELS:-600000000}"
+      # Clé Ed25519 de signature des manifestes d'export (SEC-014). Chemin d'un
+      # fichier PEM monté depuis le coffre, déposé par un humain. Absente, une
+      # clé éphémère est tirée au démarrage : les manifestes restent cohérents
+      # entre eux mais ne prouvent rien au-delà de la vie du processus — /health
+      # le signale par `signing_key_ephemeral`.
+      SDOP_SIGNING_KEY: "${SDOP_SIGNING_KEY:-}"
+      # Chiffrement au repos par document (EX-8) : clé AES-256 en base64, du
+      # coffre. Absente, les documents sont stockés en clair et /health le dit —
+      # un chiffrement qu'on croit actif sans qu'il le soit serait pire que pas
+      # de chiffrement du tout.
+      SDOP_CONTENT_KEY: "${SDOP_CONTENT_KEY:-}"
+      # Durée de visibilité (EX-5) : 45 jours par défaut, plafond de prolongation.
+      SDOP_DOC_TTL_DAYS: "${SDOP_DOC_TTL_DAYS:-45}"
+      SDOP_DOC_MAX_TTL_DAYS: "${SDOP_DOC_MAX_TTL_DAYS:-365}"
+      # Export SIEM (EX-6) : une ligne JSON par événement dans un fichier que
+      # l'agent local ingère. Pas de flux réseau de journalisation à ouvrir.
+      # Vide = désactivé.
+      SDOP_SIEM_PATH: "${SDOP_SIEM_PATH:-/journal/sdop-events.jsonl}"
+      # Durées des liens d'accès sans compte (EX-3).
+      SDOP_LINK_TTL_TOTP: "${SDOP_LINK_TTL_TOTP:-72}"
+      SDOP_LINK_TTL_CODE: "${SDOP_LINK_TTL_CODE:-96}"
+      SDOP_LINK_SESSION_MINUTES: "${SDOP_LINK_SESSION_MINUTES:-2880}"
+      SDOP_TILE_TTL: "${SDOP_TILE_TTL:-60}"
+      # Secret de signature des URL de tuiles. Absent -> secret éphémère tiré
+      # au démarrage (les URL émises ne survivent pas à un redémarrage).
+      SDOP_TILE_SECRET: "${SDOP_TILE_SECRET:-}"
+      # Envoi du LIEN par courriel (watermark/mailer.py) — jamais du code.
+      # Vide = envoi désactivé, l'interface le dit. STARTTLS obligatoire et
+      # certificat vérifié contre SDOP_SMTP_CAFILE ; mot de passe lu dans un
+      # fichier monté par la surcouche du socle, jamais dans l'environnement.
+      SDOP_SMTP_HOST: "${SDOP_SMTP_HOST:-}"
+      SDOP_SMTP_PORT: "${SDOP_SMTP_PORT:-587}"
+      SDOP_SMTP_USER: "${SDOP_SMTP_USER:-}"
+      SDOP_SMTP_FROM: "${SDOP_SMTP_FROM:-}"
+      SDOP_SMTP_PASSWORD_FILE: "${SDOP_SMTP_PASSWORD_FILE:-}"
+      SDOP_SMTP_CAFILE: "${SDOP_SMTP_CAFILE:-}"
+      # Préfixe des liens envoyés (nom PUBLIC, ex. https://sdop.example.org:8443).
+      SDOP_PUBLIC_URL: "${SDOP_PUBLIC_URL:-}"
+      # Scellement 2-sur-2 (scripts/sdop-sceller.py) : clés PUBLIQUES X25519
+      # (base64 ou PEM sur une ligne). A = les analystes, B = la direction.
+      # Les clés privées ne viennent jamais ici.
+      SDOP_SEAL_PUBKEY_A: "${SDOP_SEAL_PUBKEY_A:-}"
+      SDOP_SEAL_PUBKEY_B: "${SDOP_SEAL_PUBKEY_B:-}"
+    volumes:
+      - documents:/documents
+      - journal:/journal
+    networks:
+      - sdop-identity-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs:
+      # Rendu entièrement en mémoire (§6.1) : le système de fichiers de
+      # l'image est en lecture seule, seuls /tmp et les volumes sont écrivables.
+      - /tmp
+    # Limites de ressources (SEC-011). La rasterisation est le seul poste
+    # coûteux du produit : une page A4 à 150 dpi tient largement dans cette
+    # enveloppe, mais un PDF hostile (pages immenses, milliers de pages) ne
+    # doit pas pouvoir emporter l'hôte avec lui.
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+    labels:
+      - traefik.enable=false
+
+
+networks:
+  # La CLÉ est logique et ne bouge pas : l'override du socle la surcharge, et
+  # la renommer casserait tout déploiement existant. Le NOM du réseau réel,
+  # lui, est une variable : il dépend de l'environnement.
+  # Le défaut est le réseau de production, le seul environnement où ce dépôt
+  # peut tourner sans surcouche. Voir .env.example.
+  sdop-identity-net:
+    external: true
+    name: ${SDOP_NETWORK:-sdop-identity-net}
+
+volumes:
+  # Documents déposés. À monter sur un volume chiffré côté infra le jour venu —
+  # aucun changement de code requis (ARCHITECTURE.md).
+  documents:
+  # Journal à chaîne de hachage (§7). Tier `journal` isolé non livré : tant
+  # qu'il ne l'est pas, ce volume reste sur le même hôte — limite assumée et
+  # documentée, pas un oubli.
+  journal:

@@ -1,0 +1,39 @@
+{% extends "_base.html" %}
+{% block title %}SDOP — diffusion{% endblock %}
+{% block content %}
+<h2>Diffusion — {{ doc.tlp }}</h2>
+{% if resultats|selectattr("mode", "equalto", "code")|list %}
+<p class="note"><strong>Les codes ci-dessous ne seront plus jamais affichés.</strong>
+  Dictez chaque code par téléphone à son destinataire ; ne l'envoyez jamais par
+  courriel ni par le même canal que le lien. Ce document est consultable jusqu'au
+  <code>{{ doc.expires_at[:10] }}</code>.</p>
+{% else %}
+<p class="note">Ce document est consultable jusqu'au
+  <code>{{ doc.expires_at[:10] }}</code>.</p>
+{% endif %}
+
+{% for r in resultats %}
+<div class="publish" style="margin:16px 0">
+  <p><strong>{{ r.destinataire }}</strong></p>
+  {% if r.mode == "totp" %}
+  <p>Second facteur : <strong>code de l'application TOTP du correspondant</strong>
+    — rien à dicter.</p>
+  {% else %}
+  <p>Code à dicter : <span class="code-lien">{{ r.code }}</span></p>
+  {% endif %}
+  <p>Lien (valable {{ r.expires_in_hours }} h) :<br>
+     <code>{{ r.lien_public or r.url }}</code></p>
+  <p>Courriel :
+    {% if r.courriel == "envoyé" %}<span class="ok">envoyé</span>
+    {% elif r.courriel == "non demandé" %}non demandé — transmettez le lien vous-même
+    {% else %}<span class="ko">{{ r.courriel }}</span> — transmettez le lien vous-même{% endif %}</p>
+</div>
+{% endfor %}
+
+{% for e in erreurs %}<p class="note erreur" role="alert"><strong>Refusé — {{ e }}</strong></p>{% endfor %}
+
+<p class="actions"><a class="bouton" href="{{ url_for('viewer', doc_id=doc.doc_id) }}">Voir le document</a>
+  · <a href="{{ url_for('index') }}">Retour aux documents</a></p>
+<p class="note">Chaque émission et chaque envoi sont inscrits au ledger
+  (<code>link_issued</code>, <code>link_mailed</code> ou <code>link_mail_failed</code>).</p>
+{% endblock %}

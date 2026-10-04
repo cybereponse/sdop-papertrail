@@ -1,0 +1,4 @@
+# Contexte de build de demo/nginx.Dockerfile (racine du dépôt) — liste BLANCHE.
+*
+!nginx/conf.d/
+!test/regression/nginx-build/nginx.conf

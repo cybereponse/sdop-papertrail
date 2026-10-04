@@ -1,0 +1,152 @@
+version: 1
+metadata:
+  name: "SDOP — Liaison groupes TLP → application"
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+    blueprints.goauthentik.io/description: "PolicyBindings : seuls les dix groupes TLP/admin obtiennent une autorisation sur l'application sdop-app. Indissociable de 01-app-provider.yaml, qui pose policy_engine_mode."
+
+# Pourquoi ce fichier existe, et pourquoi ICI
+# ───────────────────────────────────────────
+# `01-app-provider.yaml` pose `policy_engine_mode: any` sur l'application.
+# Ce mode signifie « une politique liée suffit » — et sans AUCUNE politique
+# liée, il ne signifie rien : l'outpost autorise tout compte authentifié.
+# L'appartenance à `tlp-red-lecteurs` ne filtrait alors rien du tout, le groupe
+# n'était qu'une étiquette transportée dans X-Authentik-Groups.
+#
+# Poser le mode sans les politiques est le défaut. Les deux voyagent ensemble,
+# dans le même dépôt, appliqués par le même `make install-blueprints` : c'est
+# la seule manière qu'ils ne divergent pas.
+#
+# Ce fichier ne nomme que des objets de SDOP (le slug `sdop-app`) et des
+# groupes, qui sont le vocabulaire d'autorisation de SDOP : l'application et
+# son autorisation appartiennent à l'application. Les GROUPES eux-mêmes sont
+# créés par le socle d'identité.
+#
+# Ce que ce fichier NE fait pas
+# ─────────────────────────────
+# La première des deux conditions d'accès seulement. Appartenir à un groupe
+# habilité ouvre la porte de l'application ; être destinataire du document est
+# une condition distincte, entièrement applicative (watermark/authz.py) :
+#
+#     autoriser(document, lecteur) = lecteur ∈ destinataires(document)
+#                                ET habilité(lecteur, tlp(document))
+#
+# Un compte `tlp-red-lecteurs` qui n'est destinataire de rien ne voit rien.
+#
+# Dépendances et ordonnancement
+# ─────────────────────────────
+# Les groupes TLP sont créés par le socle d'identité. Les `!Find` échouent tant
+# que ce blueprint-là et 01-app-provider.yaml n'ont pas été appliqués. Le
+# worker rescanne, ça converge — mais un blueprint EN ERREUR n'est jamais
+# réessayé : vérifier l'état des blueprints après `make install-blueprints`.
+
+entries:
+  - model: authentik_policies.policybinding
+    state: present
+    identifiers:
+      target: !Find [authentik_core.application, [slug, sdop-app]]
+      group: !Find [authentik_core.group, [name, tlp-red-lecteurs]]
+    attrs:
+      order: 10
+      enabled: true
+      negate: false
+      timeout: 30
+
+  - model: authentik_policies.policybinding
+    state: present
+    identifiers:
+      target: !Find [authentik_core.application, [slug, sdop-app]]
+      group: !Find [authentik_core.group, [name, tlp-red-relecteurs]]
+    attrs:
+      order: 20
+      enabled: true
+      negate: false
+      timeout: 30
+
+  - model: authentik_policies.policybinding
+    state: present
+    identifiers:
+      target: !Find [authentik_core.application, [slug, sdop-app]]
+      group: !Find [authentik_core.group, [name, tlp-red-emetteurs]]
+    attrs:
+      order: 30
+      enabled: true
+      negate: false
+      timeout: 30
+
+  - model: authentik_policies.policybinding
+    state: present
+    identifiers:
+      target: !Find [authentik_core.application, [slug, sdop-app]]
+      group: !Find [authentik_core.group, [name, tlp-amber-strict-lecteurs]]
+    attrs:
+      order: 40
+      enabled: true
+      negate: false
+      timeout: 30
+
+  - model: authentik_policies.policybinding
+    state: present
+    identifiers:
+      target: !Find [authentik_core.application, [slug, sdop-app]]
+      group: !Find [authentik_core.group, [name, tlp-amber-strict-relecteurs]]
+    attrs:
+      order: 50
+      enabled: true
+      negate: false
+      timeout: 30
+
+  - model: authentik_policies.policybinding
+    state: present
+    identifiers:
+      target: !Find [authentik_core.application, [slug, sdop-app]]
+      group: !Find [authentik_core.group, [name, tlp-amber-strict-emetteurs]]
+    attrs:
+      order: 60
+      enabled: true
+      negate: false
+      timeout: 30
+
+  - model: authentik_policies.policybinding
+    state: present
+    identifiers:
+      target: !Find [authentik_core.application, [slug, sdop-app]]
+      group: !Find [authentik_core.group, [name, tlp-amber-lecteurs]]
+    attrs:
+      order: 70
+      enabled: true
+      negate: false
+      timeout: 30
+
+  - model: authentik_policies.policybinding
+    state: present
+    identifiers:
+      target: !Find [authentik_core.application, [slug, sdop-app]]
+      group: !Find [authentik_core.group, [name, tlp-amber-relecteurs]]
+    attrs:
+      order: 80
+      enabled: true
+      negate: false
+      timeout: 30
+
+  - model: authentik_policies.policybinding
+    state: present
+    identifiers:
+      target: !Find [authentik_core.application, [slug, sdop-app]]
+      group: !Find [authentik_core.group, [name, tlp-amber-emetteurs]]
+    attrs:
+      order: 90
+      enabled: true
+      negate: false
+      timeout: 30
+
+  - model: authentik_policies.policybinding
+    state: present
+    identifiers:
+      target: !Find [authentik_core.application, [slug, sdop-app]]
+      group: !Find [authentik_core.group, [name, platform-admins]]
+    attrs:
+      order: 100
+      enabled: true
+      negate: false
+      timeout: 30

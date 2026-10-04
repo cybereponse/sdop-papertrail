@@ -1,0 +1,63 @@
+version: 1
+metadata:
+  name: "SDOP — Proxy Provider & Application"
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+    blueprints.goauthentik.io/description: "Proxy Provider en mode forward_single pour app.sdop.example.internal + Application. Déployé via `make install-blueprints` (copie dans le dossier de blueprints du socle d'identité) ; le rattachement à l'outpost embedded relève du socle."
+
+entries:
+  # Proxy Provider — mode forward auth single application
+  - model: authentik_providers_proxy.proxyprovider
+    id: provider-app
+    state: present
+    identifiers:
+      name: sdop-app-provider
+    attrs:
+      name: sdop-app-provider
+      # Flux d'autorisation fourni par le socle d'identité
+      authorization_flow: !Find [authentik_flows.flow, [slug, core-authorization]]
+      # Flux d'authentification fourni par le socle d'identité, TOTP obligatoire
+      authentication_flow: !Find [authentik_flows.flow, [slug, core-authentication]]
+      # Flux suivi par « Se déconnecter » (/outpost.goauthentik.io/sign_out).
+      # PAS default-provider-invalidation-flow : dans l'Authentik de
+      # référence, il ne contient AUCUNE étape — le bouton n'aurait effacé que le
+      # cookie de l'outpost, et la session Authentik intacte aurait ramené
+      # l'utilisateur dans SDOP sans second facteur. default-invalidation-flow
+      # porte une UserLogoutStage : il ferme la session Authentik elle-même.
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-invalidation-flow]]
+      external_host: "https://app.sdop.example.internal"
+      mode: forward_single
+      # 15 minutes, et ce n'est pas un réglage de confort.
+      #
+      # L'outpost valide SON PROPRE cookie et ne redemande pas l'état du compte
+      # à Authentik : désactiver un compte ne coupe donc rien tant que le jeton
+      # n'a pas expiré : un compte désactivé garde l'accès jusqu'à l'expiration
+      # du jeton.
+      #
+      # Cette ligne borne donc la révocation d'un compte à 15 minutes sans
+      # aucun geste. Pour couper immédiatement, il faut aussi purger les
+      # sessions de l'utilisateur dans Authentik.
+      #
+      # Coût réel : l'outpost rafraîchit son jeton plus souvent. Invisible pour
+      # l'utilisateur, dont la session Authentik reste valable 4 h.
+      access_token_validity: "minutes=15"
+      # Aligné sur la durée de session Authentik attendue (4 h) : aucun jeton de l'outpost ne survit à la session.
+      refresh_token_validity: "hours=4"
+      intercept_header_auth: true
+
+  # Application SDOP liée au Proxy Provider
+  - model: authentik_core.application
+    id: app-sdop
+    state: present
+    identifiers:
+      slug: sdop-app
+    attrs:
+      name: "SDOP Application"
+      slug: sdop-app
+      provider: !KeyOf provider-app
+      meta_launch_url: "https://app.sdop.example.internal"
+      # « Une politique liée suffit ». Sans AUCUNE politique liée, ce mode
+      # n'exige rien : tout compte authentifié est autorisé. Les dix liaisons
+      # groupe → application sont dans 02-app-policies.yaml, et les deux
+      # fichiers sont indissociables — poser ce mode seul ouvre l'application.
+      policy_engine_mode: any

@@ -1,0 +1,88 @@
+# CI publique — aucun secret, jeton en lecture seule, aucune action tierce.
+#
+# Tourne sur les PR externes : rien ici ne doit pouvoir publier, écrire dans le
+# dépôt ni joindre un réseau privé. La publication vers GitHub se fait hors de
+# GitHub, par les mainteneurs, après revue.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # Clone manuel plutôt qu'actions/checkout : aucune dépendance tierce à
+      # épingler, et le jeton n'est jamais écrit dans .git/config (dépôt public,
+      # le clone anonyme suffit).
+      - name: checkout
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch -q --depth 1 origin "${GITHUB_REF}"
+          # La ref a pu avancer depuis le déclenchement : tester exactement le
+          # commit de l'évènement, ou échouer.
+          [ "$(git rev-parse FETCH_HEAD)" = "${GITHUB_SHA}" ] \
+            || { echo "ref déplacée depuis l'évènement" >&2; exit 1; }
+          git checkout -q FETCH_HEAD
+      - name: tests unitaires et de régression
+        run: make test
+
+  demo:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: checkout
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch -q --depth 1 origin "${GITHUB_REF}"
+          # La ref a pu avancer depuis le déclenchement : tester exactement le
+          # commit de l'évènement, ou échouer.
+          [ "$(git rev-parse FETCH_HEAD)" = "${GITHUB_SHA}" ] \
+            || { echo "ref déplacée depuis l'évènement" >&2; exit 1; }
+          git checkout -q FETCH_HEAD
+      - name: configuration Compose
+        run: |
+          docker compose -f docker-compose.yml config -q
+          docker compose --project-directory demo -f demo/compose.yml config -q
+      - name: démo autonome
+        run: make quickstart
+      - name: recette de la démo
+        run: make quickstart-check
+      - name: redémarrage conserve documents et clés
+        run: |
+          set -euo pipefail
+          O=var/quickstart/sdop-demo
+          M=(--resolve app.sdop.localhost:8443:127.0.0.1 --cacert "$O/ca.crt"
+             --cert "$O/client.crt" --key "$O/client.key")
+          B=https://app.sdop.localhost:8443
+          printf '%%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\ntrailer<</Root 1 0 R>>\n' > /tmp/ci.pdf
+          doc=$(curl -sf "${M[@]}" -H "Accept: application/json" -F tlp=TLP:AMBER \
+                -F document=@/tmp/ci.pdf "$B/api/publish" \
+                | python3 -c "import json,sys; print(json.load(sys.stdin)['doc_id'])")
+          cle() { curl -sf "${M[@]}" "$B/api/pubkey" | sha256sum; }
+          avant="$(cle)"
+          make quickstart-down
+          make quickstart
+          [ "$(cle)" = "${avant}" ] || { echo "clé de signature changée" >&2; exit 1; }
+          # Export du MÊME document : prouve qu'il est encore là et que la clé de
+          # contenu est la même (il est chiffré au repos).
+          type=$(curl -s "${M[@]}" -o /tmp/ci-export.pdf -w '%{content_type}' "$B/api/export/${doc}.pdf")
+          [ "${type}" = "application/pdf" ] || { echo "export après redémarrage : ${type}" >&2; exit 1; }
+
+      - name: chaîne de régression
+        run: bash test/regression/run-chain.sh
+      - name: arrêt
+        if: always()
+        run: CONFIRM=sdop-demo make quickstart-reset || true

@@ -1,0 +1,26 @@
+{% extends "_base.html" %}
+{% block title %}SDOP — enrôlement TOTP{% endblock %}
+{% block content %}
+<h2>Enrôlement TOTP — {{ sujet }}</h2>
+<p class="note"><strong>Ce secret ne sera plus jamais affiché.</strong> Il sert
+  au correspondant pour TOUS les documents qui lui seront diffusés en mode TOTP.
+  Vérifiez son identité par un rappel à un numéro connu, puis faites-le enrôler
+  pendant l'appel : il scanne le QR code (partage d'écran en visioconférence)
+  ou saisit le secret dicté. <strong>Jamais par courriel</strong>, ni par le
+  canal qui portera les liens : ce serait donner les deux facteurs au même
+  endroit.</p>
+
+<div class="publish" style="margin:16px 0">
+  <p>Application d'authentification : Aegis, Google Authenticator, Microsoft
+    Authenticator, FreeOTP… (type « basé sur le temps », 6 chiffres, 30 s).</p>
+  <div style="max-width:280px">{{ qr }}</div>
+  <p>Secret, à saisir à la main si le QR code ne peut pas être scanné :</p>
+  <p><span class="code-lien">{{ secret }}</span></p>
+  <p class="note">Compte affiché dans l'application : <code>SDOP cybeRéponse : {{ sujet }}</code>.
+    Pour contrôler l'enrôlement, demandez le code affiché : il change toutes les
+    30 secondes. Le premier lien TOTP se diffuse ensuite depuis la page du
+    document (« Diffuser par lien », mode TOTP).</p>
+</div>
+
+<p class="actions"><a href="{{ url_for('index') }}">Retour aux documents</a></p>
+{% endblock %}

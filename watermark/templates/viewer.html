@@ -1,0 +1,79 @@
+{% extends "_base.html" %}
+{% block title %}SDOP — {{ doc.tlp }}{% endblock %}
+{% block content %}
+
+<h2>{{ doc.tlp }} — {{ doc.original_name }}</h2>
+<p class="note">
+  Diffusé par <code>{{ doc.published_by }}</code> ·
+  visible jusqu'au <code>{{ doc.expires_at[:10] }}</code>
+  {% if destinataires %}· destinataires :
+    {% for r in destinataires %}<code>{{ r.subject }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+  {% endif %}
+</p>
+<p class="note">
+  Consultation <code>{{ view_id }}</code>, inscrite au ledger avant diffusion.
+  Chaque page est rendue côté serveur et marquée à votre nom. L'adresse de chaque
+  image de page n'est utilisable que {{ ttl }} secondes (elle ne peut pas être
+  rejouée ailleurs) — cela ne limite pas votre consultation. Aucun PDF source ni aucune couche texte n'est
+  transmis. Une capture d'écran reste possible : chaque page porte votre nom en
+  en-tête, en pied, dans les marges et au centre, pour qu'un extrait recadré
+  reste le plus souvent attribuable — mais un fragment découpé entre ces marques
+  ne l'est pas. C'est l'attribution, pas l'impossibilité de copier, qui est
+  garantie ici.
+</p>
+
+<p class="actions"><a class="bouton" href="{{ url_for('export', doc_id=doc.doc_id) }}">Exporter le PDF filigrané</a></p>
+
+{% for tile in tiles %}
+<img class="page" src="{{ tile }}" alt="page {{ loop.index }}">
+{% endfor %}
+
+<p class="note">
+  <a class="bouton" href="{{ url_for('export', doc_id=doc.doc_id) }}">Exporter le PDF filigrané</a>
+  — rendu image, sans couche texte, journalisé comme <code>document_export</code>.
+  {% if not porteur_lien %}· <a href="{{ url_for('index') }}">Retour</a>{% endif %}
+</p>
+
+{% if me and not porteur_lien and me.user == doc.published_by %}
+<h2>Diffuser par lien</h2>
+<form class="publish" method="post" action="{{ url_for('emettre_lien', doc_id=doc.doc_id) }}">
+  <label for="destinataire">Adresse du destinataire</label>
+  <input id="destinataire" name="destinataire" type="email" required
+         placeholder="correspondant@exemple.fr" autocomplete="off">
+  <label for="mode">Second facteur</label>
+  <select id="mode" name="mode">
+    <option value="code" selected>Code à dicter (réponse à incident)</option>
+    <option value="totp">TOTP — correspondant déjà enrôlé</option>
+  </select>
+  <label class="case"><input type="checkbox" name="envoyer" value="1"
+         {% if mail_actif %}checked{% else %}disabled{% endif %}>
+    Envoyer le lien par courriel
+    {% if not mail_actif %}<em>(courriel non configuré sur ce serveur)</em>{% endif %}</label>
+  <button type="submit">Émettre le lien</button>
+</form>
+<p class="note">Le code vous sera affiché une seule fois, à dicter par téléphone.
+  {% if doc.tlp == "TLP:RED" %}<strong>TLP:RED n'est jamais diffusable par lien.</strong>{% endif %}</p>
+{% endif %}
+
+{% if me and not porteur_lien and peut_gerer %}
+<h2>Fin de diffusion</h2>
+<form class="publish" method="post" action="{{ url_for('retirer', doc_id=doc.doc_id) }}">
+  <label for="motif-retrait">Motif (journalisé)</label>
+  <input id="motif-retrait" name="motif" type="text" required>
+  <button type="submit">Retirer maintenant</button>
+</form>
+<p class="note">Retirer coupe l'accès de tous, liens compris, immédiatement. Le
+  document reste chiffré sur le serveur.</p>
+<form class="publish" method="post" action="{{ url_for('sceller_maintenant', doc_id=doc.doc_id) }}">
+  <label for="motif-scellement">Motif (journalisé)</label>
+  <input id="motif-scellement" name="motif" type="text" required>
+  <button type="submit">Sceller maintenant</button>
+</form>
+<p class="note"><strong>Irréversible pour le service.</strong> L'échéance est
+  avancée à maintenant : plus personne n'y accède, puis le document est scellé
+  à la prochaine passe (au plus une heure). Il ne pourra plus être rouvert
+  qu'en réunissant hors ligne les DEUX clés privées : celle des analystes et
+  celle de la direction. Il n'existe pas de suppression.</p>
+{% endif %}
+
+{% endblock %}

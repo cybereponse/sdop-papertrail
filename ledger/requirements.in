@@ -1,0 +1,4 @@
+# Dépendances des tests du ledger (source).
+# Intention : versions voulues. Les empreintes vivent dans
+# requirements.txt, généré depuis ce fichier.
+pytest==8.3.4

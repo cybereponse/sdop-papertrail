@@ -1,0 +1,25 @@
+{% extends "_base.html" %}
+{% block title %}SDOP — accès sécurisé{% endblock %}
+{% block content %}
+<h2>Accès à un document</h2>
+<p class="note">
+  Ce lien vous a été adressé personnellement. Pour l'ouvrir, saisissez le
+  <strong>code communiqué séparément</strong> — par téléphone, ou depuis votre
+  application d'authentification. Il n'a pas été envoyé avec ce lien : c'est ce
+  qui protège l'accès si votre messagerie était consultée par un tiers.
+</p>
+{% if erreur %}<p class="note erreur" role="alert"><strong>{{ erreur }}</strong></p>{% endif %}
+<form class="publish" method="post">
+  <label for="facteur">Code</label>
+  <input id="facteur" name="facteur" type="text" autocomplete="off"
+         autocapitalize="characters" spellcheck="false" required
+         style="font-family:ui-monospace,monospace;font-size:1.1rem;letter-spacing:.12em;
+                padding:8px;border:1px solid var(--line);border-radius:4px;
+                background:var(--bg);color:var(--fg)">
+  <button type="submit">Ouvrir</button>
+</form>
+<p class="note">
+  Après cinq tentatives, ce lien est verrouillé définitivement et il faut en
+  demander un nouveau. Chaque tentative est journalisée.
+</p>
+{% endblock %}

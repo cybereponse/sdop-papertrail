@@ -1,0 +1,12 @@
+# Dépendances des tests Palier 1 (source).
+# Les deux applications Flask du dépôt sont importées directement ici :
+# ce fichier doit rester cohérent avec watermark/requirements.in, sinon
+# les tests ne testent pas ce qui tourne.
+# Intention : versions voulues. Les empreintes vivent dans
+# requirements.txt, généré depuis ce fichier.
+pytest==8.3.4
+Flask==3.1.3
+reportlab==5.0.1
+pymupdf==1.28.2
+pillow==12.3.0
+cryptography==50.0.2

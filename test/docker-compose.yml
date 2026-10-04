@@ -1,0 +1,139 @@
+# docker-compose.yml — test/ : régression SDOP à deux paliers (voir README.md).
+#
+# Palier 2 stubbe les étapes 1-3 (mTLS/Authentik) sans dupliquer core/ : le
+# service `authentik-server` est un FAUX Authentik (regression/stub-auth/,
+# répond juste "connecté" — voir son en-tête de fichier) nommé ainsi pour que
+# ../../nginx/conf.d/app.conf (monté ICI TEL QUEL, pas copié) le résolve sans
+# aucune modification. `nginx` utilise ce même fichier réel du dépôt : ce qui
+# est testé ici est identique à ce qui sera déployé, jamais une version à part.
+#
+# Noms fixes (conteneurs, réseau) propres au harnais : distincts de ceux de
+# la démo autonome et du déploiement intégré.
+
+services:
+
+  placeholder:
+    build:
+      context: ../placeholder
+      dockerfile: Dockerfile
+    image: sdop-placeholder-test:0.1.0
+    container_name: sdop-test-placeholder
+    restart: unless-stopped
+    networks:
+      - sdop-test-net
+    ports:
+      # Boucle locale seulement : un backend joignable depuis le réseau
+      # accepterait n'importe quelle identité déclarée (SEC-005). Ces ports ne
+      # servent qu'aux sondes /health du harnais.
+      - "127.0.0.1:${SDOP_TEST_PORT:-8081}:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+
+  # --- Service watermark (Lot 2) : le vrai produit, derrière le vrai nginx ---
+  # Même image que la production (même Dockerfile, même contexte racine). Les
+  # documents et le journal vivent dans des volumes de TEST, jetables.
+  watermark:
+    build:
+      context: ..
+      dockerfile: watermark/Dockerfile
+    image: sdop-watermark-test:0.1.0
+    container_name: sdop-test-watermark
+    restart: unless-stopped
+    environment:
+      SDOP_TRUST_MODE: proxy
+      SDOP_DOC_DIR: /documents
+      SDOP_LEDGER_DIR: /journal
+      # DPI réduit : la VM de test a 2 vCPU, et ce palier valide la chaîne,
+      # pas la qualité d'impression.
+      SDOP_RENDER_DPI: "100"
+      SDOP_TILE_SECRET: "secret-de-test-non-sensible"
+    volumes:
+      - documents-test:/documents
+      - journal-test:/journal
+    networks:
+      - sdop-test-net
+    ports:
+      - "127.0.0.1:${SDOP_WM_PORT:-8082}:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  # --- Palier 2 : stub des étapes 1-3, PAS un vrai Authentik ---
+  authentik-server:
+    build:
+      context: ./regression/stub-auth
+    image: sdop-stub-auth-test:0.1.0
+    container_name: sdop-test-stubauth
+    restart: unless-stopped
+    environment:
+      STUB_USERNAME: ${STUB_USERNAME:-test-regression}
+      STUB_GROUPS: ${STUB_GROUPS:-tlp-amber-emetteurs}
+      STUB_EMAIL: ${STUB_EMAIL:-test-regression@example.internal}
+      STUB_UID: ${STUB_UID:-1}
+    networks:
+      - sdop-test-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+
+  # Pas de bind-mount (le démon Docker peut être distant : VM, dind) :
+  # nginx.conf, app.conf (copie fraîche du fichier réel) et les certs sont
+  # COPIÉS dans le contexte de build juste avant `docker compose build` —
+  # voir regression/run-chain.sh.
+  nginx:
+    build:
+      context: ./regression/nginx-build
+    image: sdop-nginx-test:0.1.0
+    container_name: sdop-test-nginx
+    restart: unless-stopped
+    networks:
+      - sdop-test-net
+    ports:
+      - "${SDOP_CHAIN_PORT:-8443}:443"
+      # Vhost externe : même conteneur nginx, port distinct côté hôte pour que
+      # les deux vhosts soient joignables séparément depuis le harnais.
+      - "${SDOP_EXT_PORT:-8447}:443"
+    depends_on:
+      authentik-server:
+        condition: service_healthy
+      placeholder:
+        condition: service_healthy
+      watermark:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE, CHOWN, SETUID, SETGID]
+
+networks:
+  sdop-test-net:
+    name: sdop-test-net
+    driver: bridge
+
+volumes:
+  # Jetables : `make clean` (down -v) les supprime. Aucun document réel n'a
+  # rien à faire ici.
+  documents-test:
+  journal-test:

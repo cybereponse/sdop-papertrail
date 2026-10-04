@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+.DS_Store
+ledger/.venv/
+.pytest_cache/
+test/.env
+test/regression/.venv/
+test/regression/nginx-build/certs/
+test/regression/nginx-build/conf.d/
+
+# devbox (environnement Nix local, régénéré)
+.devbox/
+
+# Service watermark : venv local + données de démo (documents, journal, exports)
+watermark/.venv/
+var/
+.venv/
+
+# Réglages et secrets de la machine de déploiement (scripts/gen-secrets.sh) :
+# jamais versionnés.
+/.env
+/secrets/
