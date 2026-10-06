@@ -69,6 +69,18 @@ bash test/regression/run-chain.sh        # real nginx chain + fake provider (Doc
 make quickstart-check                    # the same scenarios against the demo
 ```
 
+## Verifying a sealed export
+
+Every export carries a PAdES certification signature (`SceauSDOP`, "no changes allowed",
+reason = `Exemplaire SDOP <view id>`). Outside any container, with the pinned pyHanko:
+
+```sh
+make verifier-sceau PDF=export.pdf RACINE=<root CA .crt>     # exit 0 = OK, 1 = not OK, 2 = unsealed
+devbox run verifier-sceau -- --racine <root CA .crt> export.pdf
+```
+
+Acrobat Reader shows the same signature; macOS Preview does not display PDF signatures.
+
 ## Contributing, security, licence
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) · vulnerabilities: [`SECURITY.md`](SECURITY.md) (no public

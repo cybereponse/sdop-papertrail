@@ -30,6 +30,7 @@ import ledger
 import links
 import mailer
 import manifest
+import pades
 import qr
 import render
 import sealing
@@ -260,6 +261,13 @@ def health():
         doc_ttl_days=store.DEFAULT_TTL_DAYS,
         siem_export=siem.ENABLED,
         containment=store.containment_enabled(),
+        # Sceau PAdES des exports (facultatif) : actif, exigé ou non, et jusqu'à
+        # quand. Un certificat expiré fait sortir les exports non scellés — ou
+        # les suspend si SDOP_PADES_REQUIRED=1 : la date doit se lire avant.
+        pades_seal=pades.disponible(),
+        pades_required=pades.REQUIRED,
+        pades_cert_sha256=pades.cert_sha256(),
+        pades_not_after=pades.not_after(),
     )
 
 
@@ -555,6 +563,12 @@ def export(doc_id):
     me = _identite_courante()
     doc = _authorized_doc(doc_id, me)
 
+    # Sceau exigé mais indisponible (absent, expiré) : refus AVANT tout rendu
+    # et toute journalisation — un export non scellé ne sort pas en production,
+    # et un refus ne laisse pas de faux export au journal.
+    if pades.REQUIRED and not pades.disponible():
+        abort(503, description="sceau PAdES indisponible : export suspendu")
+
     view_id = str(uuid.uuid4())
     source = _source_verifiee(doc_id, me, doc)
 
@@ -566,12 +580,24 @@ def export(doc_id):
     except render.RenderError:
         abort(500, description="PDF illisible")
 
+    # Sceau PAdES (pades.py) : après le rendu, avant le manifeste — l'empreinte
+    # journalisée doit être celle des octets scellés, ceux que reçoit le client.
+    scelle_par = None
+    if pades.disponible():
+        try:
+            pdf = pades.seal(pdf, view_id=view_id)
+        except Exception:  # noqa: BLE001 — aucun export non scellé ne sort
+            app.logger.exception("sceau PAdES impossible (export %s)", view_id)
+            abort(500, description="sceau PAdES impossible")
+        scelle_par = pades.cert_sha256()
+
     # Le manifeste décrit les octets RÉELLEMENT produits : il est donc construit
     # après le rendu, et le geste n'est journalisé qu'ensuite. L'ordre compte —
     # journaliser avant de rendre enregistrerait une demande, pas un artefact.
     man = manifest.build(doc=doc, view_id=view_id, actor=me.user, kind="export",
                          artifact=pdf,
-                         source_sha256=hashlib.sha256(source).hexdigest())
+                         source_sha256=hashlib.sha256(source).hexdigest(),
+                         pades_cert_sha256=scelle_par)
     journal(
         event="document_export", actor=me.user, doc_id=doc_id, tlp=doc["tlp"],
         version_hash=doc["version_hash"], view_id=view_id, ip=me.ip,

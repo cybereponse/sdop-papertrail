@@ -11,7 +11,7 @@
 #
 # Même image épinglée que le harnais de test (SEC-012) — mettre à jour les deux
 # ensemble.
-FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+FROM nginx:1.30-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94
 
 ARG SDOP_DEMO_DOMAIN=sdop.localhost
 

@@ -10,3 +10,4 @@ reportlab==5.0.1
 pymupdf==1.28.2
 pillow==12.3.0
 cryptography==50.0.2
+pyhanko==0.37.0

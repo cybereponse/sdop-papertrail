@@ -7,7 +7,7 @@
 # Mise à jour : résoudre le nouveau digest avec
 #   docker buildx imagetools inspect <image>:<tag>
 # puis remplacer la ligne ci-dessous — jamais un simple retag.
-FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+FROM nginx:1.30-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY conf.d/app.conf /etc/nginx/conf.d/app.conf
 # Fragment inclus par app.conf — sans lui nginx refuse de démarrer.

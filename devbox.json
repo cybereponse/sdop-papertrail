@@ -12,6 +12,10 @@
         "cd \"$DEVBOX_PROJECT_ROOT\"",
         "make test"
       ],
+      "verifier-sceau": [
+        "cd \"$DEVBOX_PROJECT_ROOT\"",
+        "bash scripts/verifier-sceau.sh \"$@\""
+      ],
       "compose-config": [
         "cd \"$DEVBOX_PROJECT_ROOT\"",
         "docker compose -f docker-compose.yml config -q && echo 'compose : OK'"

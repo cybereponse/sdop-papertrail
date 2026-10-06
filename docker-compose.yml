@@ -86,6 +86,15 @@ services:
       # entre eux mais ne prouvent rien au-delà de la vie du processus — /health
       # le signale par `signing_key_ephemeral`.
       SDOP_SIGNING_KEY: "${SDOP_SIGNING_KEY:-}"
+      # Sceau PAdES des exports (watermark/pades.py) : clé et certificat (suivi
+      # de sa chaîne) montés en lecture seule. Les deux vides : pas de sceau.
+      # Configuration partielle ou incohérente : le service refuse de démarrer.
+      # FACULTATIF par défaut : sans sceau (ou sceau expiré), l'export sort non
+      # scellé. SDOP_PADES_REQUIRED=1 l'exige — décision d'exploitation explicite,
+      # un sceau absent ou expiré suspend alors les exports.
+      SDOP_PADES_KEY: "${SDOP_PADES_KEY:-}"
+      SDOP_PADES_CERT: "${SDOP_PADES_CERT:-}"
+      SDOP_PADES_REQUIRED: "${SDOP_PADES_REQUIRED:-0}"
       # Chiffrement au repos par document (EX-8) : clé AES-256 en base64, du
       # coffre. Absente, les documents sont stockés en clair et /health le dit —
       # un chiffrement qu'on croit actif sans qu'il le soit serait pire que pas

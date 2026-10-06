@@ -13,7 +13,7 @@ COMPOSE := docker compose
 # si ce n'est pas le cas : `make CORE_DIR=/chemin/vers/core up`.
 CORE_DIR ?= ../identity-stack/core
 
-.PHONY: up down clean verify test logs ps install-vhost install-blueprints run demo verify-ledger \
+.PHONY: up down clean verify test scan-deps logs ps install-vhost install-blueprints run demo verify-ledger verifier-sceau \
 	quickstart quickstart-down quickstart-renew quickstart-check quickstart-reset
 
 ## Démarre le backend placeholder (rejoint le réseau du core en external).
@@ -43,6 +43,12 @@ test:
 	@test/regression/.venv/bin/pip install -q --require-hashes -r test/regression/requirements.txt
 	@test/regression/.venv/bin/pytest -q test/regression
 
+## Contrôle des dépendances (Trivy, version et empreinte épinglées) : bloque sur
+## toute vulnérabilité HIGH/CRITICAL corrigeable — même règle que le job CI
+## `scan-deps` (.forgejo/workflows/deps.yml). Réseau requis (base de Trivy).
+scan-deps:
+	@bash .forgejo/scan-deps.sh
+
 ## Lance le service watermark en local, SANS le socle identité partagé
 ## (identité issue de l'environnement du processus — voir scripts/dev-run.sh).
 ## Démo et développement uniquement : ne jamais y déposer de document réel.
@@ -59,6 +65,15 @@ demo:
 ## (par défaut var/journal, produit par `make run`/`make demo`).
 verify-ledger:
 	@LEDGER_DIR="$(or $(LEDGER_DIR),var/journal)" bash scripts/verify-ledger.sh
+
+## Vérifie le sceau PAdES d'exemplaires exportés, hors conteneur (pyHanko épinglé
+## du service, venv de dev-run.sh) : `make verifier-sceau PDF=exemplaire.pdf
+## RACINE=<racine.crt>` (plusieurs : PDF="a.pdf b.pdf"). Ce qu'Acrobat dirait avec
+## la racine installée ; Aperçu (macOS) n'affiche pas les signatures PDF.
+## Codes : 0 OK · 1 non OK · 2 non scellé · 3 usage.
+verifier-sceau:
+	@test -n "$(PDF)" || { echo "usage : make verifier-sceau PDF=<exemplaire.pdf> RACINE=<racine.crt>"; exit 3; }
+	@bash scripts/verifier-sceau.sh $(if $(RACINE),--racine "$(RACINE)") $(PDF)
 
 ## ── Démo autonome (demo/) ───────────────────────────────────────────────
 ## SANS le socle identité : nginx réel + FAUX fournisseur d'identité, sur la

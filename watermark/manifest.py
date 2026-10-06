@@ -40,7 +40,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 
 # Version du générateur : un manifeste doit dire avec quoi il a été produit,
 # sinon on ne peut pas rejouer la vérification des années plus tard.
-GENERATOR = "sdop-watermark/2"
+# /3 (2026-10-05) : champ `pades_cert_sha256`, l'export porte un sceau PAdES
+# (pades.py) et l'empreinte de l'artefact couvre les octets scellés. Un
+# manifeste /2 reste vérifiable : la signature porte sur le JSON tel quel.
+GENERATOR = "sdop-watermark/3"
 
 _KEY_PATH = os.environ.get("SDOP_SIGNING_KEY", "")
 
@@ -78,11 +81,14 @@ def canonical(manifest: dict) -> bytes:
 
 
 def build(*, doc: dict, view_id: str, actor: str, kind: str,
-          artifact: bytes, source_sha256: str) -> dict:
+          artifact: bytes, source_sha256: str,
+          pades_cert_sha256: str | None = None) -> dict:
     """Manifeste de ce qui a été diffusé.
 
     `source_sha256` est l'empreinte des octets **effectivement relus et rendus**
     (vérifiée par store, SEC-015), pas la valeur historique du sidecar.
+    `pades_cert_sha256` : empreinte du certificat qui a scellé l'artefact, None
+    s'il n'est pas scellé (sceau non configuré hors production).
     """
     return {
         "generator": GENERATOR,
@@ -95,6 +101,7 @@ def build(*, doc: dict, view_id: str, actor: str, kind: str,
         "source_sha256": source_sha256,
         "artifact_sha256": hashlib.sha256(artifact).hexdigest(),
         "artifact_bytes": len(artifact),
+        "pades_cert_sha256": pades_cert_sha256,
         "issued_at": datetime.now(timezone.utc).isoformat(),
     }
 

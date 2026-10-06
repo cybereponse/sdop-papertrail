@@ -7,3 +7,5 @@ pymupdf==1.28.2
 pillow==12.3.0
 gunicorn==23.0.0
 cryptography==50.0.2
+# Sceau PAdES des exports (watermark/pades.py) — bibliothèque, jamais la CLI.
+pyhanko==0.37.0

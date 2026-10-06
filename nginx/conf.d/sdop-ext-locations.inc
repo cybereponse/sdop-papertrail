@@ -20,6 +20,12 @@ limit_conn_status 429;
 limit_req_log_level warn;
 limit_conn sdop_ext_conn 50;
 
+# Méthodes (durcissement du 2026-10-05) : GET et HEAD pour lire, POST pour le
+# second facteur — rien d'autre ne sert ici. 405 avant tout service amont.
+if ($request_method !~ ^(GET|HEAD|POST)$) {
+    return 405;
+}
+
 add_header Strict-Transport-Security "max-age=31536000" always;
 add_header X-Content-Type-Options nosniff always;
 add_header Referrer-Policy no-referrer always;
