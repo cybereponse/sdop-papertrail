@@ -127,6 +127,12 @@ services:
       SDOP_SMTP_CAFILE: "${SDOP_SMTP_CAFILE:-}"
       # Préfixe des liens envoyés (nom PUBLIC, ex. https://sdop.example.org:8443).
       SDOP_PUBLIC_URL: "${SDOP_PUBLIC_URL:-}"
+      # Alerte sur les liens non aboutis (scripts/sdop-alerte-liens.py, timer
+      # côté infra) : boîte des analystes ; vide = désactivé. Délais avant de
+      # signaler un lien jamais ouvert, et une ouverture sans page servie.
+      SDOP_ALERT_TO: "${SDOP_ALERT_TO:-}"
+      SDOP_ALERT_UNOPENED_HOURS: "${SDOP_ALERT_UNOPENED_HOURS:-24}"
+      SDOP_ALERT_VIEW_GRACE_MINUTES: "${SDOP_ALERT_VIEW_GRACE_MINUTES:-15}"
       # Scellement 2-sur-2 (scripts/sdop-sceller.py) : clés PUBLIQUES X25519
       # (base64 ou PEM sur une ligne). A = les analystes, B = la direction.
       # Les clés privées ne viennent jamais ici.

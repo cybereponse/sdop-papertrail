@@ -56,6 +56,8 @@ SEVERITES = {
     "link_revoked": "notice",
     "document_withdrawn": "notice",
     "document_sealed": "notice",
+    "link_alert_sent": "notice",
+    "link_alert_failed": "warning",
 }
 
 

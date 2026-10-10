@@ -6,3 +6,4 @@
 !watermark/
 !ledger/ledger.py
 !scripts/sdop-sceller.py
+!scripts/sdop-alerte-liens.py

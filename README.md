@@ -43,6 +43,10 @@ English.
 - **Watermarked export** with a signed manifest (Ed25519), verifiable offline.
 - **Nominative links** for a recipient without an account: mandatory second factor (TOTP or a
   code read out by phone), session limited to that one document, never for TLP:RED.
+- **Alert on links that do not complete** (`scripts/sdop-alerte-liens.py`, run by an hourly
+  timer outside the application): mail never sent, factor refused, link locked, never opened,
+  opened without a page served — one digest e-mail to the analysts (`SDOP_ALERT_TO`), each
+  finding reported once, each alert itself recorded in the ledger.
 - **Authorisation** = TLP clearance **and** recipient status.
 - **Ledger**, hash-chained and fail-closed: an action that cannot be logged fails.
 - **Per-document encryption at rest**, emergency containment, visibility deadline.

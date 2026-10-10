@@ -52,7 +52,9 @@ deployment, not properties the autonomous demo provides: it has no real identity
 - **A compromised client device** holding certificate and session: outside the model;
   mitigated by revocation and by attribution.
 - **Detection** (alerting, correlation): SDOP exports events (§9); detection belongs to the
-  operator's SIEM.
+  operator's SIEM. One exception is built in: an hourly server task
+  (`scripts/sdop-alerte-liens.py`) reports to the analysts the nominative links that did not
+  complete on the recipient's side.
 
 ## 3. Authentication chain — three layers, in this order
 
@@ -236,7 +238,7 @@ digest's signature (do it with `gpg --verify`). The anchor is only as good as it
 |---|---|---|
 | Backend does not authenticate its peer | Simplicity; single-host deployment | Network isolation is part of the contract (§5) |
 | Compromised client device with certificate and session | Outside a small team's model | Attribution, revocation |
-| No built-in detection or alerting | Operator's SIEM | Event export (§9) |
+| No built-in detection or alerting (beyond the hourly check of links that do not complete, `scripts/sdop-alerte-liens.py`) | Operator's SIEM | Event export (§9) |
 | No HA, single point of failure per service | Small user base, tolerant of interruption | Automatic restart, fast redeploy |
 | TOTP enrolled at first login | Simple onboarding | mTLS already gates access; account creation is an audited admin action |
 | Ledger anchor stays on the same machine until exported | Export target is deployment-specific | Signed digest makes rewriting detectable; export is the operator's task |

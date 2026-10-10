@@ -102,6 +102,20 @@ CREATE TABLE IF NOT EXISTS link_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_subject ON link_sessions(subject);
 
+-- Alertes déjà émises sur un lien non abouti (scripts/sdop-alerte-liens.py).
+-- Une ligne par (lien, type de constat) : le contrôle horaire ne répète pas ce
+-- qu'il a déjà signalé. `sent_at` reste NULL tant qu'aucun courriel n'est parti ;
+-- `attempts` borne les nouvelles tentatives.
+CREATE TABLE IF NOT EXISTS link_alerts (
+    token_hash    TEXT NOT NULL REFERENCES links(token_hash) ON DELETE CASCADE,
+    kind          TEXT NOT NULL,
+    last_event_at TEXT,                         -- dernier événement couvert
+    attempts      INTEGER NOT NULL DEFAULT 0,   -- envois tentés sans succès
+    sent_at       TEXT,
+    message_id    TEXT,
+    PRIMARY KEY (token_hash, kind)
+);
+
 -- Réglages d'exploitation. Une seule ligne compte aujourd'hui : le confinement,
 -- qui coupe toute diffusion d'un coup (EX-4).
 CREATE TABLE IF NOT EXISTS settings (

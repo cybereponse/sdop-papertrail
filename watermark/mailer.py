@@ -57,16 +57,25 @@ def _password() -> str:
         raise MailError(f"mot de passe SMTP illisible ({exc.strerror})") from exc
 
 
-def build(destinataire: str, lien: str, tlp: str, heures: int,
-          reply_to: str = "") -> EmailMessage:
+def build_message(destinataire: str, sujet: str, corps: str,
+                  reply_to: str = "") -> EmailMessage:
+    """Enveloppe commune à tout courriel sortant : expéditeur, Message-ID, corps."""
     msg = EmailMessage()
     msg["From"] = formataddr((FROM_NAME, FROM))
     msg["To"] = destinataire
     if reply_to:
         msg["Reply-To"] = reply_to
-    msg["Subject"] = f"[{tlp}] Un document cybeRéponse vous est adressé"
+    msg["Subject"] = sujet
     msg["Message-ID"] = make_msgid(domain=FROM.rsplit("@", 1)[-1] or None)
-    msg.set_content(
+    msg.set_content(corps)
+    return msg
+
+
+def build(destinataire: str, lien: str, tlp: str, heures: int,
+          reply_to: str = "") -> EmailMessage:
+    """Courriel au destinataire d'un lien — jamais le code, jamais le nom du fichier."""
+    return build_message(
+        destinataire, f"[{tlp}] Un document cybeRéponse vous est adressé",
         f"""Bonjour,
 
 Un document classé {tlp} vous a été adressé par votre analyste cybeRéponse.
@@ -91,8 +100,7 @@ connaissez déjà.
 --
 cybeRéponse — diffusion sécurisée
 Ce message est envoyé automatiquement ; pour répondre, écrivez à votre analyste.
-""")
-    return msg
+""", reply_to)
 
 
 def send(msg: EmailMessage) -> str:

@@ -1256,3 +1256,264 @@ def test_porteur_de_lien_ne_voit_pas_les_autres_destinataires(client):
     page = client.get(f"/viewer/{doc}").get_data(as_text=True)
     assert "hopital@exemple.invalid" not in page
     assert "destinataires :" not in page
+
+
+# --- Alerte sur les liens non aboutis (2026-10-06) --------------------------
+
+import db  # noqa: E402
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+_spec_al = importlib.util.spec_from_file_location(
+    "sdop_alerte_liens", os.path.join(ROOT, "scripts", "sdop-alerte-liens.py"))
+al = importlib.util.module_from_spec(_spec_al)
+_spec_al.loader.exec_module(al)
+
+
+@pytest.fixture
+def alerteur(boite, monkeypatch):
+    """Alerte activée vers une boîte simulée ; rend (module, courriels partis)."""
+    monkeypatch.setattr(al, "ALERT_TO", "analystes@exemple.invalid")
+    return al, boite
+
+
+def _emettre(client, doc, adresse):
+    emis = client.post(f"/api/lien/{doc}", headers=EMETTEUR_AMBER | {
+        "Accept": "application/json"}, data={"destinataire": adresse}).get_json()
+    return emis["url"].rsplit("/", 1)[-1], emis["code"]
+
+
+def _retoucher_lien(adresse, **champs):
+    """Déplace les horodatages d'un lien : le temps ne s'attend pas en test."""
+    sets = ", ".join(f"{k}=?" for k in champs)
+    db.connect().execute(f"UPDATE links SET {sets} WHERE subject=?",
+                         (*champs.values(), adresse))
+
+
+def _il_y_a(**delta):
+    return (datetime.now(timezone.utc) - timedelta(**delta)).isoformat()
+
+
+def _alertes_journal():
+    return [e for e in _journal_events() if e["event"] == "link_alert_sent"]
+
+
+def test_alerte_courriel_non_parti(client, alerteur, monkeypatch):
+    """Lien émis, courriel jamais parti : les analystes le savent — une fois."""
+    al, boite = alerteur
+
+    def refus(msg):
+        raise mailer.MailError("envoi refusé : test")
+    monkeypatch.setattr(mailer, "send", refus)
+    r = client.post("/api/publish", headers=EMETTEUR_AMBER, data={
+        "tlp": "TLP:AMBER", "document": (io.BytesIO(_pdf(1)), "brgm.pdf"),
+        "destinataires": "perdu@exemple.invalid", "envoyer_lien": "1"})
+    assert r.status_code == 200
+    monkeypatch.setattr(mailer, "send", lambda msg: boite.append(msg) or "<al@test>")
+
+    assert al.main([]) == 0
+    assert len(boite) == 1
+    msg = boite[0]
+    assert msg["To"] == "analystes@exemple.invalid"
+    assert "COURRIEL NON PARTI" in msg["Subject"]
+    corps = msg.get_content()
+    assert "perdu@exemple.invalid" in corps and "emetteur.amber" in corps
+    assert "TLP:AMBER" in corps and "brgm.pdf" in corps
+    assert "envoi refusé : test" in corps
+    sent = _alertes_journal()
+    assert [e["kind"] for e in sent if e["subject"] == "perdu@exemple.invalid"] \
+        == ["courriel_non_parti"]
+    assert sent[-1]["actor"] == "systeme" and sent[-1]["issued_by"] == "emetteur.amber"
+
+    # Déjà signalé : silence.
+    assert al.main([]) == 0
+    assert len(boite) == 1
+
+
+def test_alerte_facteur_errone_puis_verrouillage(client, doc_amber, alerteur):
+    al, boite = alerteur
+    jeton, _ = _emettre(client, doc_amber, "tetu@exemple.invalid")
+    for _ in range(links.MAX_ATTEMPTS):
+        client.post(f"/lien/{jeton}", data={"facteur": "MAUVAIS1"})
+
+    assert al.main([]) == 0
+    assert len(boite) == 1
+    corps = boite[0].get_content()
+    assert "LIEN VERROUILLÉ" in corps and "SECOND FACTEUR REFUSÉ" in corps
+    assert "5 essais refusés" in corps
+    assert "tetu@exemple.invalid" in corps
+    assert "LIEN VERROUILLÉ" in boite[0]["Subject"]     # le plus grave en sujet
+
+    assert al.main([]) == 0
+    assert len(boite) == 1
+
+
+def test_alerte_nouvel_echec_realerte(client, doc_amber, alerteur):
+    """Un nouvel échec après l'alerte est un fait nouveau ; le même, non."""
+    al, boite = alerteur
+    jeton, _ = _emettre(client, doc_amber, "hesitant@exemple.invalid")
+    client.post(f"/lien/{jeton}", data={"facteur": "MAUVAIS1"})
+    al.main([])
+    assert len(boite) == 1 and "1 essai refusé" in boite[0].get_content()
+    assert "4 restants" in boite[0].get_content()
+
+    client.post(f"/lien/{jeton}", data={"facteur": "MAUVAIS2"})
+    al.main([])
+    assert len(boite) == 2 and "2 essais refusés" in boite[1].get_content()
+
+    al.main([])
+    assert len(boite) == 2
+
+
+def test_alerte_lien_non_ouvert_puis_expire(client, doc_amber, alerteur):
+    al, boite = alerteur
+    _emettre(client, doc_amber, "silencieux@exemple.invalid")
+    _retoucher_lien("silencieux@exemple.invalid", issued_at=_il_y_a(hours=25))
+
+    al.main([])
+    assert len(boite) == 1 and "NON OUVERT" in boite[0]["Subject"]
+    assert "relancer le destinataire" in boite[0].get_content()
+
+    _retoucher_lien("silencieux@exemple.invalid", expires_at=_il_y_a(hours=1))
+    al.main([])
+    assert len(boite) == 2 and "EXPIRÉ SANS OUVERTURE" in boite[1]["Subject"]
+
+    al.main([])
+    assert len(boite) == 2
+
+
+def test_alerte_non_ouvert_respecte_le_delai(client, doc_amber, alerteur, capsys):
+    al, boite = alerteur
+    _emettre(client, doc_amber, "recent@exemple.invalid")
+    assert al.main([]) == 0
+    assert boite == []
+    assert "Aucun lien non abouti" in capsys.readouterr().out
+
+
+def test_alerte_ouvert_sans_affichage(client, doc_amber, alerteur):
+    al, boite = alerteur
+    jeton, code = _emettre(client, doc_amber, "aveugle@exemple.invalid")
+    assert client.post(f"/lien/{jeton}", data={"facteur": code}).status_code == 303
+    client.delete_cookie("sdop_lien")                       # jamais de /viewer
+    _retoucher_lien("aveugle@exemple.invalid", used_at=_il_y_a(minutes=20))
+
+    al.main([])
+    assert len(boite) == 1 and "OUVERT, RIEN AFFICHÉ" in boite[0]["Subject"]
+    assert "aucune page servie" in boite[0].get_content()
+
+
+def test_alerte_ouvert_et_affiche_ne_dit_rien(client, doc_amber, alerteur):
+    al, boite = alerteur
+    jeton, code = _emettre(client, doc_amber, "lecteur.ok@exemple.invalid")
+    client.post(f"/lien/{jeton}", data={"facteur": code})
+    assert client.get(f"/viewer/{doc_amber}").status_code == 200
+    _retoucher_lien("lecteur.ok@exemple.invalid", used_at=_il_y_a(minutes=20))
+    al.main([])
+    assert boite == []
+
+
+def test_alerte_lien_deja_utilise(client, doc_amber, alerteur):
+    """Session finie, le destinataire rejoue le code : c'est un échec signalé."""
+    al, boite = alerteur
+    jeton, code = _emettre(client, doc_amber, "rejoueur@exemple.invalid")
+    client.post(f"/lien/{jeton}", data={"facteur": code})
+    client.get(f"/viewer/{doc_amber}")
+    client.delete_cookie("sdop_lien")
+    assert client.post(f"/lien/{jeton}", data={"facteur": code}).status_code == 403
+
+    al.main([])
+    assert len(boite) == 1
+    corps = boite[0].get_content()
+    assert "déjà utilisé" in corps and "ouvert ensuite" not in corps
+    assert "réémettre un lien" in corps          # pas « redicter le code »
+    assert "restant" not in corps                # compteur sans objet, lien consommé
+
+
+def test_alerte_dry_run_n_ecrit_rien(client, doc_amber, alerteur, capsys):
+    al, boite = alerteur
+    jeton, _ = _emettre(client, doc_amber, "simule@exemple.invalid")
+    client.post(f"/lien/{jeton}", data={"facteur": "MAUVAIS1"})
+    avant = db.connect().execute("SELECT COUNT(*) FROM link_alerts").fetchone()[0]
+    n_journal = len(_alertes_journal())
+
+    assert al.main(["--dry-run"]) == 0
+    sortie = capsys.readouterr().out
+    assert "Sujet : [SDOP] 1 diffusion par lien non aboutie" in sortie
+    assert "simule@exemple.invalid" in sortie and "simulation" in sortie
+    assert boite == []
+    assert db.connect().execute("SELECT COUNT(*) FROM link_alerts").fetchone()[0] == avant
+    assert len(_alertes_journal()) == n_journal
+
+
+def test_alerte_desactivee_sans_destinataire(client, doc_amber, alerteur, monkeypatch, capsys):
+    al, boite = alerteur
+    monkeypatch.setattr(al, "ALERT_TO", "")
+    jeton, _ = _emettre(client, doc_amber, "ignore@exemple.invalid")
+    client.post(f"/lien/{jeton}", data={"facteur": "MAUVAIS1"})
+    assert al.main([]) == 0
+    assert boite == [] and "désactivée" in capsys.readouterr().out
+
+
+def test_alerte_echec_envoi_reessaye_puis_abandonne(client, doc_amber, alerteur, monkeypatch):
+    al, boite = alerteur
+    tentatives = []
+
+    def refus(msg):
+        tentatives.append(msg)
+        raise mailer.MailError("envoi refusé : test")
+    monkeypatch.setattr(mailer, "send", refus)
+    jeton, _ = _emettre(client, doc_amber, "malchance@exemple.invalid")
+    client.post(f"/lien/{jeton}", data={"facteur": "MAUVAIS1"})
+
+    assert al.main([]) == 1
+    assert len(tentatives) == 1
+    assert "link_alert_failed" in [e["event"] for e in _journal_events()]
+    row = db.connect().execute(
+        "SELECT a.* FROM link_alerts a JOIN links l USING (token_hash)"
+        " WHERE l.subject=?", ("malchance@exemple.invalid",)).fetchone()
+    assert row["attempts"] == 1 and row["sent_at"] is None
+
+    al.main([]); al.main([])
+    assert len(tentatives) == 3
+    assert al.main([]) == 0                      # abandon : plus de tentative
+    assert len(tentatives) == 3
+
+
+def test_alerte_correle_au_dernier_lien_emis(client, doc_amber, alerteur):
+    """Deux liens pour la même personne et le même document : les échecs vont
+    au lien d'alors, l'ouverture au suivant — un seul lien en défaut."""
+    al, boite = alerteur
+    jeton1, _ = _emettre(client, doc_amber, "double@exemple.invalid")
+    for _ in range(links.MAX_ATTEMPTS):
+        client.post(f"/lien/{jeton1}", data={"facteur": "MAUVAIS1"})
+    jeton2, code2 = _emettre(client, doc_amber, "double@exemple.invalid")
+    client.post(f"/lien/{jeton2}", data={"facteur": code2})
+    client.get(f"/viewer/{doc_amber}")
+    client.delete_cookie("sdop_lien")
+
+    constats, _ = al.collecter(al._now())
+    miens = [c for c in constats if c["lien"]["subject"] == "double@exemple.invalid"]
+    assert {c["kind"] for c in miens} == {"verrouille", "echecs_facteur"}
+    assert {c["lien"]["token_hash"] for c in miens} == {links._hash(jeton1)}
+
+
+def test_alerte_segments_sur_deux_mois(tmp_path, monkeypatch):
+    monkeypatch.setattr(ledger, "LEDGER_DIR", str(tmp_path))
+    maintenant = datetime.now(timezone.utc)
+    avant = maintenant - timedelta(days=40)
+    for quand in (avant, maintenant):
+        open(ledger._segment_path(str(tmp_path), quand), "w").close()
+    chemins = al.segments(avant, maintenant)
+    assert len(chemins) == 2 and chemins[0] < chemins[1]
+
+
+def test_dockerignore_laisse_entrer_ce_que_le_dockerfile_copie():
+    """Le contexte de build est une liste blanche : tout `COPY` du Dockerfile
+    doit y être autorisé, sinon la construction échoue en production
+    (constaté le 2026-10-10 sur sdop-alerte-liens.py)."""
+    with open(os.path.join(ROOT, ".dockerignore")) as f:
+        autorises = [l[1:].strip() for l in f if l.startswith("!")]
+    with open(os.path.join(ROOT, "watermark", "Dockerfile")) as f:
+        copies = [l.split()[1] for l in f if l.startswith("COPY ")]
+    for source in copies:
+        assert any(source == a or source.startswith(a.rstrip("/") + "/")
+                   for a in autorises), f"{source} copié mais exclu du contexte"

@@ -13,7 +13,7 @@ COMPOSE := docker compose
 # si ce n'est pas le cas : `make CORE_DIR=/chemin/vers/core up`.
 CORE_DIR ?= ../identity-stack/core
 
-.PHONY: up down clean verify test scan-deps logs ps install-vhost install-blueprints run demo verify-ledger verifier-sceau \
+.PHONY: up down clean verify test scan-deps logs ps install-vhost install-blueprints run demo verify-ledger verifier-sceau alertes-liens \
 	quickstart quickstart-down quickstart-renew quickstart-check quickstart-reset
 
 ## Démarre le backend placeholder (rejoint le réseau du core en external).
@@ -60,6 +60,12 @@ run:
 ## puis vérifie la chaîne de hachage du journal produit.
 demo:
 	@bash scripts/demo.sh
+
+## Contrôle des liens non aboutis, dans le conteneur : alerte courriel aux
+## analystes (SDOP_ALERT_TO). Lancé par un timer horaire côté infra ; à la main :
+## `make alertes-liens ARGS=--dry-run`.
+alertes-liens:
+	@$(COMPOSE) exec watermark python sdop-alerte-liens.py $(ARGS)
 
 ## Vérifie l'intégrité de la chaîne de hachage d'un journal local
 ## (par défaut var/journal, produit par `make run`/`make demo`).

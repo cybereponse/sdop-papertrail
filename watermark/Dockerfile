@@ -21,6 +21,8 @@ COPY watermark/templates/ ./templates/
 COPY ledger/ledger.py ./
 # Balayage des échéances et scellement (tâche serveur, jamais une route HTTP).
 COPY scripts/sdop-sceller.py ./
+# Contrôle horaire des liens non aboutis, alerte aux analystes (même modèle).
+COPY scripts/sdop-alerte-liens.py ./
 
 # Points de montage créés AVANT la déclaration des volumes et possédés par
 # `nobody` : Docker recopie les droits du répertoire de l'image dans un volume
